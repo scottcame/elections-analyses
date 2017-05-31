@@ -1,0 +1,155 @@
+---
+title: "Mapping Alaska Election Precincts to County-Equivalents"
+output:
+  html_notebook:
+    code_folding: hide
+  html_document: default
+---
+
+This notebook contains the analysis and visualizations used in my presentation at the 2017 CascadiaR conference in Portland, Oregon, June 3 2017.
+
+```{r setup, message=FALSE, error=FALSE, warning=FALSE}
+library(choroplethr, quietly=TRUE) 
+library(choroplethrMaps, quietly=TRUE)
+library(ggplot2, quietly=TRUE)
+library(tidyverse, quietly=TRUE)
+library(memoise, quietly=TRUE)
+library(rgdal, quietly=TRUE)
+library(RCurl, quietly=TRUE)
+library(ggplot2, quietly=TRUE)
+library(sp, quietly=TRUE)
+library(rgeos, quietly=TRUE)
+library(ggthemes, quietly=TRUE)
+library(scales, quietly=TRUE)
+library(ggrepel, quietly=TRUE)
+library(ggmap, quietly=TRUE)
+mismatches <- read_csv('mismatches.csv', col_names=FALSE) %>% rename(MismatchedArea=X2, TotalArea=X3)
+```
+
+#### End Goal: A county-level dataset of election results
+
+The goal of the Data for Democracy "election transparency" project, initially, was to produce a dataset of county-level election results, voter registration data, and potential explanatory variables from the Census (ACS) and other sources.
+
+```{r, message=FALSE, warning=FALSE, error=FALSE}
+resultsDf <- read_csv("https://query.data.world/s/3y2aayrvc6lfezkhxufecvmi2") %>%
+  transmute(region=as.integer(County), value=rDRPct)
+choro <- CountyChoropleth$new(resultsDf)
+choro$title <- "2016 Presidential Election Result"
+choro$set_num_colors(1)
+choro$ggplot_scale <- scale_fill_gradient2(low="#0099F7", high="#F11712", midpoint=.5, limits=c(0.0, 1.0), name='% Trump Vote')
+choro$render()
+```
+
+#### Problem: Mapping Alaska Precincts to Counties
+
+Most states publish official election results by county.  Alaska is a notable exception.
+
+First of all, Alaska doesn't actually have counties.  The more populated parts of Alaska are organized into _boroughs_, which are roughly equivalent to counties in other states (or parishes in Louisiana).  More sparsely populated parts of Alaska are organized into "census areas".  Together, boroughs and census areas are considered "county equivalents".
+
+At the time of our analysis (early January, 2017) the only official published results from the 2016 election in Alaska were at the precinct level.  As in other states, Alaska's voting precincts are designed to represent the "least common denominator" of jurisdictions for which voters are asked to resolve candidates or questions.  So, one would expect precincts in Alaska to "roll up" to county equivalents--boroughs and census areas--as well as school districts, state legislative districts, and other jurisdictions for which voters elect candidates or decide issues via the ballot.  We found that the roll-up of precincts to county-equivalent is not perfect, however.
+
+The more serious challenge, though, is that the State of Alaska does not publish a mapping of precincts to county equivalents.  So, there is no way to aggregate precinct-level results at the county-equivalent level.
+
+Lacking any official association of precincts to county-equivalents, we decided to create our own.
+
+#### Solution: Creating a mapping via intersecting polygons
+
+Theoretically, because election precincts roll up to county-equivalents, polygons defining election precincts should be wholly contined within boroughs or census areas.  That is, one should be able to overlay the election precinct polygons (defined in shapefiles published by the State of Alaska) and county polygons from US Census shapefiles.  However, due to differences in resolution and anomalies in the shapefiles, the polygons don't always line up perfectly.  Additionally, election precincts in Alaska sometimes span multiple census areas, which are not really like counties at all.  Census areas are creatures of the US Census Bureau whose purpose is to facilitate the conduct of the decennial census.  Collectively, the ten census areas in Alaska constitute the "unorganized borough" in which all government services are provided by either the state of Alaska or a tribal government. Because a census area has no distinct candidates for office or ballot questions, there is no negative consequence of having election precincts span them.
+
+(It is interesting to note that the land mass of the ten census areas--the "unorganized borough"--has an area larger than any of the other 49 states in the United States.)
+
+In any case, this is what the election precinct polygons look like, with the county-equivalent polygons color-shaded to show the alignment:
+
+```{r, message=FALSE, warn=FALSE, fig.width=10}
+getShp <- function(url, zipRootDir, dsn) {
+  zipFile <- paste0(tempfile(), '.zip')
+  if (startsWith(url, 'http')) {
+    zipFileConn <- CFILE(zipFile, mode="wb")
+    curlPerform(url=url, writedata=zipFileConn@ref, followlocation=TRUE)
+    close(zipFileConn)
+  } else {
+    file.copy(url, zipFile)
+  }
+  zipDir <- dirname(zipFile)
+  extracted <- unzip(zipFile, exdir=zipDir)
+  shpFile <- paste0(zipDir, '/', zipRootDir)
+  readOGR(shpFile, dsn, verbose=FALSE)
+}
+crs <- CRS("+proj=aea +lat_1=55 +lat_2=65 +lat_0=50 +lon_0=-154 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs")
+precinctShp <- getShp('http://elections.alaska.gov/doc/info/2013-SW-Precinct-Proc-Plan.zip', 'SW Proc Shape Files', '2013-SW-Proc-Shape-files') %>% spTransform(crs)
+countyShp <- getShp('https://www2.census.gov/geo/tiger/TIGER2016/COUNTY/tl_2016_us_county.zip', '',
+                    'tl_2016_us_county') %>% subset(.$STATEFP == '02') %>% spTransform(crs)
+precinctShpDf <- fortify(precinctShp)
+countyShpDf <- fortify(countyShp)
+precinctData <- precinctShp@data
+precinctData$rnid <- rownames(precinctData)
+centroidMatrix <- coordinates(precinctShp) %>% as_tibble() %>% rename(CentroidLong=V1, CentroidLat=V2)
+precinctData <- bind_cols(precinctData, centroidMatrix)
+precinctData <- precinctData %>%
+  mutate_if(is.factor, as.character) %>%
+  left_join(mismatches, by=c('DISTRICT'='X1')) %>%
+  mutate(Mismatch=!is.na(MismatchedArea)) %>% mutate(PctMismatch=MismatchedArea/TotalArea, NAME=trimws(NAME))
+precinctShpDf <- inner_join(precinctShpDf, precinctData, by=c('id'='rnid'))
+ggplot() +
+  geom_polygon(data=countyShpDf, mapping=aes(x=long, y=lat, group=group, fill=id)) +
+  geom_path(data=precinctShpDf %>% filter(!Mismatch), mapping=aes(x=long, y=lat, group=group), color='black', size=.3) +
+  geom_path(data=precinctShpDf %>% filter(Mismatch), mapping=aes(x=long, y=lat, group=group), color='red', size=.3) +
+  geom_label_repel(data=precinctData %>% filter(PctMismatch > .1 & CentroidLong < mean(CentroidLong)),
+                  mapping=aes(x=CentroidLong, y=CentroidLat, label=NAME), size=3,
+                  nudge_x=-800000) +
+  geom_label_repel(data=precinctData %>% filter(PctMismatch > .1 & CentroidLong > mean(CentroidLong) & CentroidLat > 1195000),
+                  mapping=aes(x=CentroidLong, y=CentroidLat, label=NAME), size=3,
+                  nudge_x=1000000) +
+  geom_label_repel(data=precinctData %>% filter(PctMismatch > .1 & CentroidLong > mean(CentroidLong) & CentroidLat < 1195000),
+                  mapping=aes(x=CentroidLong, y=CentroidLat, label=NAME), size=3,
+                  nudge_y=-350000, nudge_x=-250000) +
+  theme_void() +
+  scale_fill_manual(values=c("#d9b1d2","#a7c99a","#a3b5de","#eddaac","#86c6e1","#e6ab9e","#8fd9e5",
+                             "#eec6a8","#b5e0f2","#c9aa8c","#d4d2ee","#bee3b9","#f1cbd5","#87c4b8",
+                             "#e1c2bd","#98c3a6","#f2e9d6","#a9becd","#d0d9ae","#a4beb8","#d8f4d2",
+                             "#c0b8a6","#c2ebe2","#cebe9b","#a6b79f","#dcd4c2","#b5bd94","#cec6b4","#c2d2ba"),
+                    guide='none')
+```
+
+There are `r nrow(mismatches)` out of `r nrow(precinctData)` precincts that have more than a five square kilometer area in multiple county-equivalents.  While a handful of them (labeled on the map above) have a somewhat large area (> 10%) outside of the assigned county equivalent, in most cases the misalignment is quite small:
+
+```{r, fig.width=10}
+ggplot(precinctData %>% filter(Mismatch) ) +
+  geom_bar(aes(x=reorder(NAME, PctMismatch), y=PctMismatch), stat='identity') +
+  coord_flip() +
+  theme_economist() +
+  scale_y_continuous(labels=percent, limits=c(0, .5)) + labs(x=NULL, y='% Area Outside Assigned County Equivalent')
+```
+
+#### Intersecting polygons to assign precincts to county equivalents
+
+To create a mapping of precincts to county equivalents, we simply do a pairwise intersection of each precinct polygon with each county equivalent polygon, and assign to each precinct the county equivalent that overlays the largest portion of the precinct's area.  To accomplish this, we use the `gIntersection` function in the `rgeos` package, which creates a new polygon from two original polygons, defined as the intersection between them.
+
+```{r central}
+centralData <- precinctData %>% filter(DISTRICT=='06-015')
+```
+
+To illustrate, consider the case of Precinct 06-015 (Central).  This precinct occupies `r prettyNum(centralData$TotalArea, big.mark=',')` square kilometers of mostly wilderness to the northeast of Fairbanks, and is larger in area than the Commonwealth of Massachusetts.  The town of Central and other inhabited commnunities along the Steese Highway are in the Yukon-Koyukuk Census Area (blue shaded area in the map below), but the extreme southeastern portion of the precinct, between the Kandik River and the Canadian border, are in the Southeast Fairbanks Census Area (red shaded area).
+
+```{r central2, message=FALSE, warning=FALSE, fig.width=10}
+centralShp <- subset(precinctShp, DISTRICT=='06-015') %>% spTransform(CRS("+proj=longlat +datum=WGS84"))
+centralShpDf <- fortify(centralShp)
+ykShp <- subset(countyShp, COUNTYFP=='290') %>% spTransform(CRS("+proj=longlat +datum=WGS84"))
+sefShp <- subset(countyShp, COUNTYFP=='240') %>% spTransform(CRS("+proj=longlat +datum=WGS84"))
+i_yk <- gIntersection(centralShp, ykShp)@polyobj %>% as('SpatialPolygonsDataFrame')
+i_ykDf <- fortify(i_yk)
+i_sef <- gIntersection(centralShp, sefShp) %>% as('SpatialPolygonsDataFrame')
+i_sefDf <- fortify(i_sef)
+baseMap <- ggmap(get_map(location=c(-145.273413, 65.594280), source='google', zoom=6))
+baseMap + geom_polygon(data=i_ykDf, mapping=aes(x=long, y=lat, group=group), fill='blue', alpha=.2) +
+  geom_polygon(data=i_sefDf, mapping=aes(x=long, y=lat, group=group), fill='red', alpha=.2) +
+  geom_path(data=centralShpDf, mapping=aes(x=long, y=lat, group=group)) + labs(x=NULL, y=NULL)
+```
+
+Of the `r prettyNum(centralData$TotalArea, big.mark=',')` square kilometers in the Central precinct, `r prettyNum(centralData$MismatchedArea, big.mark=',')` are in the Southeast Fairbanks Census Area (`r formatC(100*centralData$MismatchedArea / centralData$TotalArea)` percent).  It certainly seems reasonable to assign the Central precinct to the Yukon-Koyukuk Census Area (even more so in this particular case, because in addition to occupying the larger portion of the precinct's area, we know that this census area contains the places where the majority of the precinct's voters live, too.)
+
+#### The End Product: A complete mapping of precincts to Boroughs and Census Areas
+
+On the Data for Democracy election transparency project, we included a [`getAlaskaPrecinctCountyMapping()` function](https://github.com/Data4Democracy/election-transparency/blob/master/r-packages/uselections/R/util.R) in our `uselections` [package](https://github.com/Data4Democracy/election-transparency/tree/master/r-packages/uselections) that executes the loop to perform the pairwise intersection, and then wrote the assignments into a tibble that is exposed by the package.  Following the D4D convention, we also uploaded the mapping as a [file](https://data.world/data4democracy/election-transparency/file/AlaskaPrecinctBoroughMapping.csv) within the election-transparency [dataset](https://data.world/data4democracy/election-transparency) at data.world.
+
+The package-exposed tibble and the data.world file include two sets of mappings--one for the original precincts defined in 2012 (and used in the 2012 Federal and state elections) based on the 2010 census, and one for precincts redrawn in 2013 (which were used in the 2014 and 2016 elections).
