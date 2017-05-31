@@ -28,7 +28,7 @@ mismatches <- read_csv('mismatches.csv', col_names=FALSE) %>% rename(MismatchedA
 
 #### End Goal: A county-level dataset of election results
 
-The goal of the Data for Democracy "election transparency" project, initially, was to produce a dataset of county-level election results, voter registration data, and potential explanatory variables from the Census (ACS) and other sources.
+The goal of the Data for Democracy "election transparency" project, initially, was to produce a dataset of county-level election results, voter registration data, and potential explanatory variables from the Census (e.g., American Community Survey) and other sources.
 
 ```{r, message=FALSE, warning=FALSE, error=FALSE}
 resultsDf <- read_csv("https://query.data.world/s/3y2aayrvc6lfezkhxufecvmi2") %>%
@@ -111,7 +111,7 @@ ggplot() +
                     guide='none')
 ```
 
-There are `r nrow(mismatches)` out of `r nrow(precinctData)` precincts that have more than a five square kilometer area in multiple county-equivalents.  While a handful of them (labeled on the map above) have a somewhat large area (> 10%) outside of the assigned county equivalent, in most cases the misalignment is quite small:
+We have outlined in red those precincts with a significant area in multiple county equivalents ("significant" is defined here as having at least a five square kilometer area in a county equivalent.)  There are `r nrow(mismatches)` of these precincts, out of a total of `r nrow(precinctData)`.  While a handful of them (labeled on the map above) have a somewhat large area (> 10%) outside the assigned county equivalent, in most cases the misalignment is quite small:
 
 ```{r, fig.width=10}
 ggplot(precinctData %>% filter(Mismatch) ) +
@@ -125,28 +125,65 @@ ggplot(precinctData %>% filter(Mismatch) ) +
 
 To create a mapping of precincts to county equivalents, we simply do a pairwise intersection of each precinct polygon with each county equivalent polygon, and assign to each precinct the county equivalent that overlays the largest portion of the precinct's area.  To accomplish this, we use the `gIntersection` function in the `rgeos` package, which creates a new polygon from two original polygons, defined as the intersection between them.
 
-```{r central}
+```{r precinctData}
 centralData <- precinctData %>% filter(DISTRICT=='06-015')
+bettlesData <- precinctData %>% filter(DISTRICT=='40-328')
 ```
 
 To illustrate, consider the case of Precinct 06-015 (Central).  This precinct occupies `r prettyNum(centralData$TotalArea, big.mark=',')` square kilometers of mostly wilderness to the northeast of Fairbanks, and is larger in area than the Commonwealth of Massachusetts.  The town of Central and other inhabited commnunities along the Steese Highway are in the Yukon-Koyukuk Census Area (blue shaded area in the map below), but the extreme southeastern portion of the precinct, between the Kandik River and the Canadian border, are in the Southeast Fairbanks Census Area (red shaded area).
 
 ```{r central2, message=FALSE, warning=FALSE, fig.width=10}
-centralShp <- subset(precinctShp, DISTRICT=='06-015') %>% spTransform(CRS("+proj=longlat +datum=WGS84"))
-centralShpDf <- fortify(centralShp)
-ykShp <- subset(countyShp, COUNTYFP=='290') %>% spTransform(CRS("+proj=longlat +datum=WGS84"))
-sefShp <- subset(countyShp, COUNTYFP=='240') %>% spTransform(CRS("+proj=longlat +datum=WGS84"))
-i_yk <- gIntersection(centralShp, ykShp)@polyobj %>% as('SpatialPolygonsDataFrame')
-i_ykDf <- fortify(i_yk)
-i_sef <- gIntersection(centralShp, sefShp) %>% as('SpatialPolygonsDataFrame')
-i_sefDf <- fortify(i_sef)
-baseMap <- ggmap(get_map(location=c(-145.273413, 65.594280), source='google', zoom=6))
-baseMap + geom_polygon(data=i_ykDf, mapping=aes(x=long, y=lat, group=group), fill='blue', alpha=.2) +
-  geom_polygon(data=i_sefDf, mapping=aes(x=long, y=lat, group=group), fill='red', alpha=.2) +
-  geom_path(data=centralShpDf, mapping=aes(x=long, y=lat, group=group)) + labs(x=NULL, y=NULL)
+showPrecinctOnMap <- function(precinctNumber, county1, county2) {
+  
+  convertPolygonsToSPDF <- function(v) {
+    ret <- NULL
+    if ('SpatialCollections'==class(v)) {
+      ret <- v@polyobj
+    } else {
+      ret <- v
+    }
+    as(ret, 'SpatialPolygonsDataFrame')
+  }
+  
+  singlePrecinctShp <- subset(precinctShp, DISTRICT==precinctNumber) %>% spTransform(CRS("+proj=longlat +datum=WGS84"))
+  singlePrecinctShpDf <- fortify(singlePrecinctShp)
+  c1Shp <- subset(countyShp, COUNTYFP==county1) %>% spTransform(CRS("+proj=longlat +datum=WGS84"))
+  c2Shp <- subset(countyShp, COUNTYFP==county2) %>% spTransform(CRS("+proj=longlat +datum=WGS84"))
+  i1 <- convertPolygonsToSPDF(gIntersection(singlePrecinctShp, c1Shp))
+  i1Df <- fortify(i1)
+  i2 <- convertPolygonsToSPDF(gIntersection(singlePrecinctShp, c2Shp))
+  i2Df <- fortify(i2)
+  baseMap <- ggmap(get_map(location=coordinates(singlePrecinctShp)[1,], source='google', zoom=6)) +
+    geom_polygon(data=i1Df, mapping=aes(x=long, y=lat, group=group), fill='blue', alpha=.2) +
+    geom_polygon(data=i2Df, mapping=aes(x=long, y=lat, group=group), fill='red', alpha=.2) +
+    geom_path(data=singlePrecinctShpDf, mapping=aes(x=long, y=lat, group=group)) + labs(x=NULL, y=NULL)
+  ret <- list()
+  ret$baseMap <- baseMap
+  ret$precinctBoundary <- singlePrecinctShpDf
+  ret$county1Intersection <- i1Df
+  ret$county2Intersection <- i2Df
+  ret
+}
+showPrecinctOnMap('06-015', '290', '240')$baseMap
 ```
 
 Of the `r prettyNum(centralData$TotalArea, big.mark=',')` square kilometers in the Central precinct, `r prettyNum(centralData$MismatchedArea, big.mark=',')` are in the Southeast Fairbanks Census Area (`r formatC(100*centralData$MismatchedArea / centralData$TotalArea)` percent).  It certainly seems reasonable to assign the Central precinct to the Yukon-Koyukuk Census Area (even more so in this particular case, because in addition to occupying the larger portion of the precinct's area, we know that this census area contains the places where the majority of the precinct's voters live, too.)
+
+Other precinct misalignments appear to be more about differences in resolution or the use of different mapping tools, rather than any geographic context.  Consider the case of Bettles, which is about 200 miles northwest of Central, at the foot of the Brooks Range.  It is mostly in the Yukon-Koyukuk Census Area, but small slivers of its northern border area extend into the North Slope Borough.  The slivers are so small, in fact, that they're impossible to see on a map of the entire precinct:
+
+```{r bettles, message=FALSE, warning=FALSE, fig.width=10}
+bettlesMap <- showPrecinctOnMap('40-328', '290', '185')
+bettlesMap$baseMap
+```
+
+However, if we remove the base map and zoom in, we notice that the northern precinct boundary occasionally extends a tiny bit north of the 68 degree latitude line, which is the southern border of the North Slope Borough:
+
+```{r bettles2, message=FALSE, warn=FALSE, fig.width=10}
+ggplot() + geom_polygon(data=bettlesMap$county2Intersection, mapping=aes(x=long, y=lat, group=group), fill='red') +
+    geom_path(data=bettlesMap$precinctBoundary, mapping=aes(x=long, y=lat, group=group), color='grey') + theme_bw() +
+  labs(x=NULL, y=NULL)
+```
+The red area here is only `r formatC(100*bettlesData$MismatchedArea / bettlesData$TotalArea, digits=2)` percent of the precinct's area, and so clearly ought not alter our allocation of this precinct to the Yukon-Koyukuk Census Area.  Bettles does serve as a good illustration, though, that polygons in shapefiles from different sources are often slightly misaligned due to small errors in map creation or differences in resolution.  Thus, methods (like the one we used in the Data for Democracy project) that attempt to associate administrative areas via polygon alignment need to take these anomalies into account.
 
 #### The End Product: A complete mapping of precincts to Boroughs and Census Areas
 
