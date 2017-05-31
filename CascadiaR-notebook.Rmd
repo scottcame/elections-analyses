@@ -169,7 +169,7 @@ showPrecinctOnMap('06-015', '290', '240')$baseMap
 
 Of the `r prettyNum(centralData$TotalArea, big.mark=',')` square kilometers in the Central precinct, `r prettyNum(centralData$MismatchedArea, big.mark=',')` are in the Southeast Fairbanks Census Area (`r formatC(100*centralData$MismatchedArea / centralData$TotalArea)` percent).  It certainly seems reasonable to assign the Central precinct to the Yukon-Koyukuk Census Area (even more so in this particular case, because in addition to occupying the larger portion of the precinct's area, we know that this census area contains the places where the majority of the precinct's voters live, too.)
 
-Other precinct misalignments appear to be more about differences in resolution or the use of different mapping tools, rather than any geographic context.  Consider the case of Bettles, which is about 200 miles northwest of Central, at the foot of the Brooks Range.  It is mostly in the Yukon-Koyukuk Census Area, but small slivers of its northern border area extend into the North Slope Borough.  The slivers are so small, in fact, that they're impossible to see on a map of the entire precinct:
+Other precinct misalignments appear to be more about differences in resolution or the use of different mapping tools, rather than any geographic context.  Consider the case of Bettles, which is about 200 miles northwest of Central, at the foot of the Brooks Range.  It is mostly in the Yukon-Koyukuk Census Area, but small slivers of its northern border area extend into the North Slope Borough.  The slivers are so small, in fact, that they're impossible to see when overlayed on the base map:
 
 ```{r bettles, message=FALSE, warning=FALSE, fig.width=10}
 bettlesMap <- showPrecinctOnMap('40-328', '290', '185')
