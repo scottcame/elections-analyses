@@ -1,0 +1,4 @@
+*.Rproj
+*.html
+.RData
+.Rhistory
