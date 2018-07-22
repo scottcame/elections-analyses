@@ -1,6 +1,8 @@
 ---
 title: "Analysis of Australia's 2016 Federal Election"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r, echo=FALSE}
@@ -22,7 +24,7 @@ Data sources included:
 
 R was used to transform the data from these sources into a [data.world dataset](https://data.world/scottcame/australian-federal-election-2016). The R source code for the transformation is [here](https://github.com/scottcame/elections-data/blob/master/australia-elections/AustraliaElection.R).
 
-```{r, echo=FALSE, message=FALSE}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
 ElectionResults2016 <- suppressMessages(read_csv('https://query.data.world/s/rdtdjo6gianfc64voj3pbnfpdueadv')) %>%
   inner_join(suppressMessages(read_csv('https://query.data.world/s/odgvs4f5uy66gg5hrovs6jct5mdx26')), by='CED') %>%
@@ -64,7 +66,7 @@ nationalSPDF <- suppressMessages(tidy(nationalShp)) %>%
 
 The following shows the percentage of votes in each electoral district won by the Liberal / National Liberal Party of Queensland / Nationals coalition that formed the government following the election:
 
-```{r, echo=FALSE, fig.width=6}
+```{r, echo=FALSE, fig.width=7}
 nationalSPDF %>% ggplot(aes(x=long, y=lat, group=group, fill=LiberalCoalitionPct)) +
   geom_polygon() +
   scale_fill_continuous(label=percent) +
@@ -76,7 +78,7 @@ nationalSPDF %>% ggplot(aes(x=long, y=lat, group=group, fill=LiberalCoalitionPct
 
 One might hypothesize that voters in electoral districts with higher unemployment might be disinclined to support the incumbent Liberal coalition parties.  This scatterplot, using 2016 Census results, lends some support to this hypothesis by showing that as unemployment rate increases in an electoral district, support for the Liberals declines:
 
-```{r, echo=FALSE, fig.width=6}
+```{r, echo=FALSE, fig.width=10}
 ggplot(ElectionResults2016, aes(x=UnemploymentRate, y=LiberalCoalitionPct)) + geom_point() + geom_smooth(method='lm') +
   scale_y_continuous(labels=percent) + scale_x_continuous(labels=percent) +
   labs(title='Correlation of Unemployment Rate and Liberal Coalition Vote Share', subtitle='By Electoral District, 2016 Federal Election for Australia House of Representatives',
