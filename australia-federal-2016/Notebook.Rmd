@@ -1,0 +1,46 @@
+---
+title: "Analysis of Australia's 2016 Federal Election"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r, echo=FALSE}
+suppressMessages(library(tidyverse, quietly=TRUE))
+suppressMessages(library(ggthemes, quietly=TRUE))
+suppressMessages(library(scales, quietly=TRUE))
+```
+
+This notebook presents a very basic analysis of results from the Australian Federal election in 2016 for the House of Representatives.  The intent here is to provide an example of using Docker to support reproducible research rather than a comprehensive analysis of the election.
+
+Data sources included:
+
+* Vote tallies from the [Australian Electoral Commission (AEC)](https://results.aec.gov.au/20499/Website/HouseDownloadsMenu-20499-Csv.htm)
+* Census estimates by Commonwealth Electoral District from the [Australian Bureau of Statistics](http://www.abs.gov.au/websitedbs/censushome.nsf/home/tablebuilder)
+
+R was used to transform the data from these sources into a [data.world dataset](https://data.world/scottcame/australian-federal-election-2016). The R source code for the transformation is [here](https://github.com/scottcame/elections-analyses/blob/master/australia-federal-2016/AustraliaElection.R).
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+ElectionResults2016 <- suppressMessages(read_csv('https://query.data.world/s/rdtdjo6gianfc64voj3pbnfpdueadv')) %>%
+  inner_join(suppressMessages(read_csv('https://query.data.world/s/odgvs4f5uy66gg5hrovs6jct5mdx26')), by='CED') %>%
+  mutate(LiberalCoalitionVotes=LP+LNP+NP, LiberalCoalitionPct=LiberalCoalitionVotes/Turnout) %>%
+  mutate(UnemploymentRate=(LabourForceStatus_Unemployed_looking_for_FT+LabourForceStatus_Unemployed_looking_for_PT) /
+           (LabourForceStatus_Unemployed_looking_for_FT+LabourForceStatus_Unemployed_looking_for_PT+
+              LabourForceStatus_Employed_worked_FT+LabourForceStatus_Employed_worked_PT+LabourForceStatus_Employed_away_from_work))
+
+```
+
+#### Unemployment Rate and Liberal Coalition Vote Share
+
+One might hypothesize that voters in electoral districts with higher unemployment might be disinclined to support the incumbent Liberal coalition parties.  This scatterplot, using 2016 Census results, lends some support to this hypothesis by showing that as unemployment rate increases in an electoral district, support for the Liberals declines:
+
+```{r, echo=FALSE, fig.width=10}
+ggplot(ElectionResults2016, aes(x=UnemploymentRate, y=LiberalCoalitionPct)) + geom_point() + geom_smooth(method='lm') +
+  scale_y_continuous(labels=percent) + scale_x_continuous(labels=percent) +
+  theme_economist() +
+  labs(title='Correlation of Unemployment Rate and Liberal Coalition Vote Share',
+       subtitle='By Commonwealth Electoral District, 2016 Federal Election for Australia House of Representatives',
+       caption='"Liberal Coalition" consists of the Liberal, National Liberal Party of Queensland, and National Parties',
+       x='Unemployment Rate (2016 Census)', y='Liberal Coalition Vote Share')
+```
