@@ -1,0 +1,253 @@
+---
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(sf)
+library(scales)
+library(kableExtra)
+library(ggthemes)
+library(broom)
+
+precincts2020 <- readRDS('/tmp/precincts2020.rds')
+precincts2024 <- readRDS('/tmp/precincts2024.rds')
+primaryResults2024Df <- readRDS('/tmp/primaryResults2024Df.rds')
+generalResults2024Df <- readRDS('/tmp/generalResults2024Df.rds')
+generalResults2020Df <- readRDS('/tmp/generalResults2020Df.rds')
+
+candidate2024 <- generalResults2024Df %>%
+  mutate(
+    Race=case_when(
+      grepl(x=Race, pattern='Instruction') ~ 'SPI2024G',
+      Race %in% c('Governor', 'State of Washington Governor') ~ 'Governor2024G',
+      .default = NA_character_
+    ),
+    Candidate=case_when(
+      grepl(x=Candidate, pattern='Ferguson') ~ 'Ferguson',
+      grepl(x=Candidate, pattern='Reykdal') ~ 'Reykdal',
+      .default = 'Other'
+    )
+  ) %>%
+  bind_rows(
+    primaryResults2024Df %>%
+      mutate(
+        Race=case_when(
+          grepl(x=Race, pattern='Instruction') ~ 'SPI2024P',
+          .default = NA_character_
+        ),
+        Candidate=case_when(
+          grepl(x=Candidate, pattern='Reykdal') ~ 'Reykdal',
+          .default = 'Other'
+        )
+      )
+  ) %>%
+  filter(!is.na(Race)) %>%
+  group_by(FIPS, PrecinctCode, Race, Candidate) %>% summarize(Votes=sum(Votes), .groups = "drop") %>%
+  pivot_wider(id_cols = c(FIPS, PrecinctCode), names_from=c(Race, Candidate), values_from=Votes) %>%
+  inner_join(precincts2024 %>% st_drop_geometry() %>% select(FIPS, Precinct, LegDistrict), by=c('FIPS', 'PrecinctCode'='Precinct'))
+
+candidate2020 <- generalResults2020Df %>%
+  mutate(
+    Race=case_when(
+      grepl(x=Race, pattern='Sup.+Instruction') ~ 'SPI2020G',
+      .default = NA_character_
+    ),
+    Candidate=case_when(
+      grepl(x=Candidate, pattern='Reykdal') ~ 'Reykdal',
+      .default = 'Other'
+    )
+  ) %>%
+  filter(!is.na(Race)) %>%
+  group_by(FIPS, PrecinctCode, Race, Candidate) %>% summarize(Votes=sum(Votes), .groups = "drop") %>%
+  pivot_wider(id_cols = c(FIPS, PrecinctCode), names_from=c(Race, Candidate), values_from=Votes) %>%
+  inner_join(precincts2020 %>% st_drop_geometry() %>% select(FIPS, Precinct, LegDistrict), by=c('FIPS', 'PrecinctCode'='Precinct'))
+
+byLD <- candidate2020 %>% group_by(LegDistrict) %>% summarise(across(-c(FIPS, PrecinctCode), sum, .names = "{col}")) %>%
+  inner_join(candidate2024 %>% group_by(LegDistrict) %>% summarise(across(-c(FIPS, PrecinctCode), sum, .names = "{col}")), by='LegDistrict')
+
+byLD <- byLD %>% inner_join(st_read('/opt/data/elections/wa_leg_districts_2024/'), by=c('LegDistrict'='District'))
+
+# won't use the by-county stuff for now, just getting this ready
+  
+byCounty <- candidate2020 %>% group_by(FIPS) %>% summarise(across(-c(LegDistrict, PrecinctCode), sum, .names = "{col}")) %>%
+  inner_join(candidate2024 %>% group_by(FIPS) %>% summarise(across(-c(LegDistrict, PrecinctCode), sum, .names = "{col}")), by='FIPS')
+
+byCounty <- byCounty %>% inner_join(st_read('/opt/data/shapefiles/cb_county/') %>% mutate(GEOID=as.integer(GEOID)), by=c('FIPS'='GEOID'))
+
+```
+
+This analysis aggregates election results data (from the Washington Secretary of State) from the 2024 August Primary and General elections, and the 2020 General election, in order
+to examine Chris Reykdal's performance in the 2024 general election compared to:
+
+* His own performance in the 2024 August primary
+* Governor Bob Ferguson's performance in the 2024 general
+* His own performance in the 2020 general
+
+We will examine each of these questions by Legislative District.
+
+## Summary of the 2024 General Election for Washington State Superintendent of Public Instruction
+
+```{r, include=FALSE}
+
+overallWinPct <- byLD %>% select(matches('SPI2024G')) %>% summarise(across(everything(), sum, .names='{col}')) %>%
+  mutate(v=SPI2024G_Reykdal/(SPI2024G_Reykdal+SPI2024G_Other)) %>% pull(v) %>% percent(accuracy=.1)
+
+```
+
+In the 2024 General election, Superintendent Reykdal was reelected with `r overallWinPct` of the total statewide vote. The results by Legislative district are shown in the following table (districts sorted in descending order of Reykdal's 2024 General election vote share). The first column (after Legislative District) shows the share of the total vote won by Reykdal. The pairs of columns to follow show comparisons to other vote shares: Reykdal's share in the 2024 August primary, Governor Ferguson's share in the 2024 General, and Reykdal's share from the 2020 General election. The second column in each pair shows the difference from the baseline (Reykdal 2024 General) to that comparison share. Taking the first row as an example, in Reykdal's winngest district (the 43rd, encompassing the Capitol Hill, University District, and Fremont neighborhoods of Seattle), he won 81.3 percent of the vote in the 2024 General. This is 22.6 percentage points higher than the share he won in the August primary, 7.4 points lower than Governor Ferguson won in that district in the 2024 General, and 1.8 points higher than Reykdal won in the 43rd back in 2020.
+
+```{r, echo=FALSE}
+byLD %>%
+  mutate(
+    v2024G=SPI2024G_Reykdal/(SPI2024G_Reykdal+SPI2024G_Other),
+    v2024P=SPI2024P_Reykdal/(SPI2024P_Reykdal+SPI2024P_Other),
+    d2024P=v2024G-v2024P,
+    vFerguson=Governor2024G_Ferguson/(Governor2024G_Ferguson+Governor2024G_Other),
+    dFerguson=v2024G-vFerguson,
+    v2020G=SPI2020G_Reykdal/(SPI2020G_Reykdal+SPI2020G_Other),
+    d2020G=v2024G-v2020G
+  ) %>% select(LegDistrict, matches('^(v|d)')) %>% arrange(desc(v2024G)) %>%
+  mutate(
+    across(starts_with('v'), ~ percent(.x, accuracy=.1)),
+    across(starts_with('d'), ~ percent(.x, accuracy=.2))
+    ) %>%
+  mutate(
+    across(c('d2020G','dFerguson'), function(col) cell_spec(col, color=if_else(as.double(str_replace(col,'%','')) < 0, 'red', 'green')))
+  ) %>%
+kable(col.names = c('LegDistrict'='District', 'v2024G'='Reykdal 2024 General', 'Share', 'Difference', 'Share', 'Difference', 'Share', 'Difference'), 
+        format = "html",
+      escape = FALSE,
+        digits = 1) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  add_header_above(c(" " = 2, 'Reykdal 2024 Primary'=2, 'Ferguson 2024 General'=2, 'Reykdal 2020 General'=2))
+
+```
+
+## Themes: Partisanship, Reinforcement, and Disposition of the Primary Vote
+
+The results in this table suggest a few broad themes in the 2024 General election for Superintendent of Public Instruction. One is that partisanship appears to play less of a role in voters' choice of Superintendent, which is perhaps not surprising given that the office is non-partisan, without party preference noted on the ballot. As evidence for this hypothesis, note that Superintendent Reykdal underperformed Governor Ferguson in those districts in which Reykdal performed the best, and he overperformed Ferguson in the districts where he performed the worst. The overall range of vote share by district for the two candidates (36-81 percent for Reykdal, versus 34-89 percent for Ferguson) also demonstrates that there was more "lean" in the Governor's race than for Superintendent. A couple of legislative districts stand out as outliers: the 14th and 22nd. We will do a little more analysis on these below.
+
+The second theme of note compares Reykdal's vote share by district in the 2024 and 2020 General elections. Broadly speaking, in 2024 Reykdal overperformed his 2020 results in districts where he did the best, and underperformed where he did the worst. This might suggest that Reykdal's term from 2020-2024 reinforced the electorate's views of him, as those who approved in 2020 generally approved even more in 2024, with the opposite reinforcement in districts that preferred his opponents. As with the theme of partisanship, there are outliers, and again the 14th district stands out. Reykdal actually won the 14th district in 2020, with 50.8% of the vote, but lost it in 2024 by 18 points.
+
+The third theme considers Superintendent Reykdal's performance in the 2024 General versus the August Primary. These results allow us to get a glimpse into how the electorate allocated votes cast in August for candidates who did not make it to the General, though we should keep in mind that in the Presidential election years that align with statewide elections in Washington, the electorate in November is different in important ways from those who vote in August. Nonetheless, an interesting hypothesis emerges in the results: Superintendent Reykdal improved on his Primary election performance the most in the Seattle metro area. Of the top ten districts ranked by Primary-to-General improvement, eight are in King County (the other two are the 23rd in northern Kitsap County, and the 40th in San Juan and eastern Whatcom and Skagit Counties). The following map shows the precinct-level change in vote share in the eight King County districts:
+
+```{r, echo=FALSE, fig.height=9, out.width='100%'}
+  primaryGeneralAdf <- candidate2024 %>%
+  mutate(
+    v2024G=SPI2024G_Reykdal/(SPI2024G_Reykdal+SPI2024G_Other),
+    v2024P=SPI2024P_Reykdal/(SPI2024P_Reykdal+SPI2024P_Other),
+    d2024P=v2024G-v2024P
+  ) %>% select(-LegDistrict)
+
+primaryGeneralMidpoint <- primaryGeneralAdf %>% pull(d2024P) %>% median(na.rm=TRUE)
+primaryGeneralDistricts <- c(43,36,46,41,48,34,11,32)
+
+precincts2024 %>% filter(LegDistrict %in% primaryGeneralDistricts) %>% left_join(primaryGeneralAdf, by=c('FIPS', 'Precinct'='PrecinctCode'))  %>% ggplot() +
+  geom_sf(mapping=aes(fill=d2024P)) +
+  scale_fill_gradient2(low="#d8b365", high="#5ab4ac", guide="colorbar", na.value="grey90", labels=label_number(accuracy=.01), midpoint=primaryGeneralMidpoint) +
+  labs(fill=NULL) +
+  guides(fill=guide_colorbar(position='bottom')) +
+  labs(title='Change in vote share for Chris Reykdal from Primary to General Election, 2024',
+       subtitle=paste0('Legislative Districts ', paste0(sort(primaryGeneralDistricts), collapse=', ')),
+       caption=paste0(
+         paste0('Color gradient scaled so that neutral/white represents the statewide median change of ', comma(primaryGeneralMidpoint, accuracy=.01)),
+         '\nGrey-shaded precincts had no results reported, or results were combined with nearby precincts by SOS Elections to protect voter privacy'
+       ),
+  ) +
+  theme_map() +
+  theme(legend.justification.bottom = 'center', legend.key.width = unit(50, "points"))
+```
+
+Statewide, Superintendent Reykdal improved on his August Primary vote share by 14 points. Focusing in on these eight King County districts in which that improvement was most significant, it appears that the improvement was elevated in certain geographic areas:
+
+* precincts in the Capitol Hill, University District, Magnolia, and Ballard areas of Seattle
+* West Seattle, especially precincts on the water along Alki Beach and Elliott Bay
+* Mercer Island and the nearby mainland precincts in Bellevue and Factoria, south of I-90
+* The City of Issaquah and nearby precincts
+* Vashon Island
+
+Conversely, Reykdal's improvement was more modest--closer to the statewide measure of 14 points, or even less--in the East Renton Highlands and Newcastle on the eastside, the Aurora Avenue / Greenwood corridor in north Seattle, and some precincts around White Center and Rainier Beach in south Seattle.
+
+```{r echo=FALSE, include=FALSE}
+
+saaris <- primaryResults2024Df %>%
+  mutate(
+    Race=case_when(
+      grepl(x=Race, pattern='Instruction') ~ 'SPI2024P',
+      .default = NA_character_
+    ),
+    Candidate=case_when(
+      grepl(x=Candidate, pattern='Saaris') ~ 'Saaris',
+      .default = 'Other'
+    )
+  ) %>% filter(Race=='SPI2024P') %>%
+  filter(!is.na(Race)) %>%
+  group_by(FIPS, PrecinctCode, Race, Candidate) %>% summarize(Votes=sum(Votes), .groups = "drop") %>%
+  pivot_wider(id_cols = c(FIPS, PrecinctCode), names_from=c(Race, Candidate), values_from=Votes) %>%
+  inner_join(precincts2024 %>% st_drop_geometry() %>% select(FIPS, Precinct, LegDistrict), by=c('FIPS', 'PrecinctCode'='Precinct'))
+
+saarisByLD <- saaris %>% ungroup() %>% group_by(LegDistrict) %>%
+  summarise(across(-c(FIPS, PrecinctCode), sum, .names = "{col}")) %>%
+  mutate(saarisPct=SPI2024P_Saaris/(SPI2024P_Saaris+SPI2024P_Other))
+
+saaris <- saaris %>%
+  mutate(saarisPct=SPI2024P_Saaris/(SPI2024P_Saaris+SPI2024P_Other)) %>% select(FIPS, PrecinctCode, saarisPct) %>%
+  inner_join(primaryGeneralAdf %>% select(FIPS, PrecinctCode, d2024P), by=c('FIPS', 'PrecinctCode')) %>%
+  filter(!is.na(saarisPct)) %>% filter(!is.na(d2024P))
+
+corel <- cor(saaris$saarisPct, saaris$d2024P)
+
+```
+
+Further analysis shows that Superintendent Reykdal likely attracted the majority of the voters who voted for Reid Saaris in the August Primary. Saaris finished third in the Primary, with 24 percent of the primary vote. Of the ten legislative districts just mentioned in which Reykdal improved his vote share the most from August to November, eight of them were in Saaris's best ten districts from the Primary:
+
+```{r echo=FALSE}
+saarisByLD %>% arrange(desc(saarisPct)) %>% select(LegDistrict, saarisPct) %>% top_n(10, saarisPct) %>%
+  mutate(saarisPct = percent(saarisPct, accuracy=0.1)) %>%
+  kable(col.names = c('LegDistrict'='District', 'saarisPct'='Saaris Share of 2024 Primary Vote'), 
+        format = "html",
+        align = c('r','r'),
+        digits = 1) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+While we cannot say with much confidence how much of the Saaris primary vote switched to Reykdal in the General, the fact that 8 of the 10 districts in which Reykdal improved the most were _also_ in Saaris's top ten districts is strong evidence that these were many of the same voters. To put it in statistical terms, the Pearson's correlation coefficient at the *precinct* level, on a statewide basis, between the change in Reykdal's vote share from Primary to General and Saaris's vote share in the primary was `r comma(corel, accuracy=.01)`.
+
+We can bring all of these factors together in a precinct-level regression analysis to attempt to explain the change in Superintendent Reykdal's vote share from the August Primary to the General election. In this analysis we regress the change in vote share on three variables: Reykdal's share of the primary election vote, Governor Ferguson's share of the general election vote, and Reid Saaris's share of the primary vote. We make the simplifying assumption that ordinary least-squares regression conditions are satisfied. The results of the analysis are as follows:
+
+```{r echo=FALSE}
+
+regResults <- candidate2024 %>%
+  mutate(
+    ReykdalPrimaryShare=SPI2024P_Reykdal/(SPI2024P_Reykdal+SPI2024P_Other),
+    ReykdalPrimaryGeneralChange=(SPI2024G_Reykdal/(SPI2024G_Reykdal+SPI2024G_Other) - ReykdalPrimaryShare),
+    FergusonGeneralShare=Governor2024G_Ferguson/(Governor2024G_Ferguson+Governor2024G_Other)) %>%
+  inner_join(saaris, by=c('FIPS', 'PrecinctCode')) %>%
+  select(ReykdalPrimaryGeneralChange, ReykdalPrimaryShare, FergusonGeneralShare, SaarisPrimaryShare=saarisPct, FIPS, PrecinctCode) %>%
+  lm(ReykdalPrimaryGeneralChange ~ ReykdalPrimaryShare + FergusonGeneralShare + SaarisPrimaryShare, data = .) %>% summary() 
+
+regResults %>% tidy() %>%
+  select(term, estimate, `std.error`, statistic) %>%
+  kable(col.names = c('Variable', 'Coefficient', 'Standard Error', 't Statistic'), 
+        format = "html",
+        digits=2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+```
+
+The R-Squared value for the regression is `r comma(regResults$r.squared, accuracy=.001)`, suggesting that `r percent(regResults$r.squared, accuracy=0.1)` percent of the cross-precinct variation in the change of Reykdal's primary-to-general vote share is explained by these three variables. All three explanatory variables' t-statistics suggest that they are significant, with the p(>|t|) probability being effectively zero in all three cases.
+
+We can interpret these results as follows:
+
+* Holding the other two variables constant, for every 1 point change in primary election vote share, Reykdal's general election performance would be about .6 points in the _opposite_ direction
+* Using Ferguson's General election vote share as a proxy for partisanship, the analysis suggests that for every 1 point more "Democratic" a precinct was, Reykdal's general election performance increased by about .5 points
+* Holding the other two variables constant, for every 1 point increase in Saaris's primary vote share, Reykdal's _general_ election vote share increased by about a quarter point
+
+Thus the regression analysis provides further evidence for the hypotheses raised above, which is that in general, the distribution of Reykdal vote share across precincts "compressed" from August to November, as he improved performance in the August precincts where he did the worst, and diminished performance in the August precincts where he did the best. And in general, his performance tracked closely with that of Governor Ferguson, suggesting close (but not perfect) partisan alignment with Democratic voters. And finally, Reykdal captured the lion's share of the Saaris primary vote.
+
+
+
+
+
