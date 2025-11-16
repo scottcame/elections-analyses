@@ -1,4 +1,5 @@
 library(tidyverse)
+library(sf)
 
 # assumes tibble `precincts` is created from precinct-geo.R
 

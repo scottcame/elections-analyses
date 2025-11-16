@@ -67,14 +67,14 @@ candidate2020 <- generalResults2020Df %>%
 byLD <- candidate2020 %>% group_by(LegDistrict) %>% summarise(across(-c(FIPS, PrecinctCode), sum, .names = "{col}")) %>%
   inner_join(candidate2024 %>% group_by(LegDistrict) %>% summarise(across(-c(FIPS, PrecinctCode), sum, .names = "{col}")), by='LegDistrict')
 
-byLD <- byLD %>% inner_join(st_read('/opt/data/elections/wa_leg_districts_2024/'), by=c('LegDistrict'='District'))
+byLD <- byLD %>% inner_join(st_read('/opt/data/spatial/Washington_State_Legislative_Districts_2024.geojson'), by=c('LegDistrict'='District'))
 
 # won't use the by-county stuff for now, just getting this ready
   
 byCounty <- candidate2020 %>% group_by(FIPS) %>% summarise(across(-c(LegDistrict, PrecinctCode), sum, .names = "{col}")) %>%
   inner_join(candidate2024 %>% group_by(FIPS) %>% summarise(across(-c(LegDistrict, PrecinctCode), sum, .names = "{col}")), by='FIPS')
 
-byCounty <- byCounty %>% inner_join(st_read('/opt/data/shapefiles/cb_county/') %>% mutate(GEOID=as.integer(GEOID)), by=c('FIPS'='GEOID'))
+byCounty <- byCounty %>% inner_join(st_read('/opt/data/spatial/cb_county/') %>% mutate(GEOID=as.integer(GEOID)), by=c('FIPS'='GEOID'))
 
 ```
 

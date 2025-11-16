@@ -141,7 +141,7 @@ makePrecincts2023 <- function() {
 
 makePrecincts2024 <- function() {
   
-  awRaw <- list.files('/opt/data/shapefiles/tl_areawater/', full.names = TRUE) %>% map(st_read) %>% bind_rows()
+  awRaw <- list.files('/opt/data/spatial/tl_areawater/', full.names = TRUE) %>% map(st_read) %>% bind_rows()
   aw <- awRaw %>% filter((is.na(FULLNAME) & AWATER > 5000000) | grepl(x=FULLNAME,
                                                                       pattern='Sea|Inlt|Cv|Columbia Riv|Snake Riv|Ocean|Strait|Umatilla|Willapa|Hbr|Bay|Sopun|Beardslee|Mallard Slough|Long Island Slough|Naselle'))
   
