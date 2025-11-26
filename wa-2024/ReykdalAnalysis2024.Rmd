@@ -11,6 +11,12 @@ library(kableExtra)
 library(ggthemes)
 library(broom)
 
+# Data provenance:
+#   precinct-geo.R creates precincts2020 and precincts2024 (precinct spatial geometries
+#     from SOS shapefiles, with water bodies removed and legislative district assignments)
+#   CleanResults.R creates primaryResults2024Df, generalResults2024Df, and generalResults2020Df
+#     (precinct-level election results from SOS and King County data, joined to precinct geometries)
+
 precincts2020 <- readRDS('/tmp/precincts2020.rds')
 precincts2024 <- readRDS('/tmp/precincts2024.rds')
 primaryResults2024Df <- readRDS('/tmp/primaryResults2024Df.rds')
@@ -71,10 +77,10 @@ byLD <- byLD %>% inner_join(st_read('/opt/data/spatial/Washington_State_Legislat
 
 # won't use the by-county stuff for now, just getting this ready
   
-byCounty <- candidate2020 %>% group_by(FIPS) %>% summarise(across(-c(LegDistrict, PrecinctCode), sum, .names = "{col}")) %>%
-  inner_join(candidate2024 %>% group_by(FIPS) %>% summarise(across(-c(LegDistrict, PrecinctCode), sum, .names = "{col}")), by='FIPS')
+# byCounty <- candidate2020 %>% group_by(FIPS) %>% summarise(across(-c(LegDistrict, PrecinctCode), sum, .names = "{col}")) %>%
+#   inner_join(candidate2024 %>% group_by(FIPS) %>% summarise(across(-c(LegDistrict, PrecinctCode), sum, .names = "{col}")), by='FIPS')
 
-byCounty <- byCounty %>% inner_join(st_read('/opt/data/spatial/cb_county/') %>% mutate(GEOID=as.integer(GEOID)), by=c('FIPS'='GEOID'))
+# byCounty <- byCounty %>% inner_join(st_read('/opt/data/spatial/cb_county/') %>% mutate(GEOID=as.integer(GEOID)), by=c('FIPS'='GEOID'))
 
 ```
 
@@ -96,7 +102,7 @@ overallWinPct <- byLD %>% select(matches('SPI2024G')) %>% summarise(across(every
 
 ```
 
-In the 2024 General election, Superintendent Reykdal was reelected with `r overallWinPct` of the total statewide vote. The results by Legislative district are shown in the following table (districts sorted in descending order of Reykdal's 2024 General election vote share). The first column (after Legislative District) shows the share of the total vote won by Reykdal. The pairs of columns to follow show comparisons to other vote shares: Reykdal's share in the 2024 August primary, Governor Ferguson's share in the 2024 General, and Reykdal's share from the 2020 General election. The second column in each pair shows the difference from the baseline (Reykdal 2024 General) to that comparison share. Taking the first row as an example, in Reykdal's winngest district (the 43rd, encompassing the Capitol Hill, University District, and Fremont neighborhoods of Seattle), he won 81.3 percent of the vote in the 2024 General. This is 22.6 percentage points higher than the share he won in the August primary, 7.4 points lower than Governor Ferguson won in that district in the 2024 General, and 1.8 points higher than Reykdal won in the 43rd back in 2020.
+In the 2024 General election, Superintendent Reykdal was reelected with `r overallWinPct` of the total statewide vote. The results by Legislative district are shown in the following table (districts sorted in descending order of Reykdal's 2024 General election vote share). The first column (after Legislative District) shows the share of the total vote won by Reykdal. The pairs of columns to follow show comparisons to other vote shares: Reykdal's share in the 2024 August primary, Governor Ferguson's share in the 2024 General, and Reykdal's share from the 2020 General election. The second column in each pair shows the difference from the baseline (Reykdal 2024 General) to that comparison share. Taking the first row as an example, in Reykdal's winningest district (the 43rd, encompassing the Capitol Hill, University District, and Fremont neighborhoods of Seattle), he won 81.3 percent of the vote in the 2024 General. This is 22.6 percentage points higher than the share he won in the August primary, 7.4 points lower than Governor Ferguson won in that district in the 2024 General, and 1.8 points higher than Reykdal won in the 43rd back in 2020.
 
 ```{r, echo=FALSE}
 byLD %>%
@@ -237,7 +243,7 @@ regResults %>% tidy() %>%
 
 ```
 
-The R-Squared value for the regression is `r comma(regResults$r.squared, accuracy=.001)`, suggesting that `r percent(regResults$r.squared, accuracy=0.1)` percent of the cross-precinct variation in the change of Reykdal's primary-to-general vote share is explained by these three variables. All three explanatory variables' t-statistics suggest that they are significant, with the p(>|t|) probability being effectively zero in all three cases.
+The R-Squared value for the regression is `r comma(regResults$r.squared, accuracy=.001)`, suggesting that `r percent(regResults$r.squared, accuracy=0.1)` of the cross-precinct variation in the change of Reykdal's primary-to-general vote share is explained by these three variables. All three explanatory variables' t-statistics suggest that they are significant, with the p(>|t|) probability being effectively zero in all three cases.
 
 We can interpret these results as follows:
 
