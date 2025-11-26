@@ -152,7 +152,7 @@ primaryGeneralDistricts <- c(43,36,46,41,48,34,11,32)
 
 precincts2024 %>% filter(LegDistrict %in% primaryGeneralDistricts) %>% left_join(primaryGeneralAdf, by=c('FIPS', 'Precinct'='PrecinctCode'))  %>% ggplot() +
   geom_sf(mapping=aes(fill=d2024P)) +
-  scale_fill_gradient2(low="#d8b365", high="#5ab4ac", guide="colorbar", na.value="grey90", labels=label_number(accuracy=.01), midpoint=primaryGeneralMidpoint) +
+  scale_fill_gradient2(low="#8c510a", high="#01665e", guide="colorbar", na.value="grey90", labels=label_number(accuracy=.01), midpoint=primaryGeneralMidpoint) +
   labs(fill=NULL) +
   guides(fill=guide_colorbar(position='bottom')) +
   labs(title='Change in vote share for Chris Reykdal from Primary to General Election, 2024',
