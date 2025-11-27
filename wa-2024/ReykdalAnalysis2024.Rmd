@@ -212,19 +212,9 @@ fergusonScatterDf <- byLD %>%
   ) %>%
   select(LegDistrict, vReykdal, dFerguson)
 
-fergusonLm <- lm(dFerguson ~ vReykdal, data = fergusonScatterDf)
-fergusonScatterDf <- fergusonScatterDf %>%
-  mutate(residual = abs(resid(fergusonLm))) %>%
-  arrange(desc(residual)) %>%
-  mutate(labelDistrict = if_else(row_number() <= 6, as.character(LegDistrict), NA_character_))
-
 ggplot(fergusonScatterDf, aes(x = vReykdal, y = dFerguson)) +
   geom_smooth(formula = 'y ~ x', method = "lm", se = FALSE, color = "gray70", linetype = "dashed", linewidth = 0.5) +
   geom_point() +
-  geom_text_repel(aes(label = labelDistrict), na.rm = TRUE, size = 3,
-                  min.segment.length = 0, box.padding = 0.5, point.padding = 0.3,
-                  segment.color = "gray50", segment.size = 0.3,
-                  direction = "y", force = 2) +
   scale_x_continuous(labels = percent_format(accuracy = 1)) +
   scale_y_continuous(labels = percent_format(accuracy = 1)) +
   labs(
@@ -235,8 +225,6 @@ ggplot(fergusonScatterDf, aes(x = vReykdal, y = dFerguson)) +
 ```
 
 Partisanship appears to play less of a role in voters' choice of Superintendent, which is perhaps not surprising given that the office is non-partisan, without party preference noted on the ballot. Superintendent Reykdal underperformed Governor Ferguson in those districts in which Reykdal performed the best, and he overperformed Ferguson in the districts where he performed the worst. And the overall range of vote share by district for the two candidates (36-81 percent for Reykdal, versus 34-89 percent for Ferguson) also demonstrates that there was more "lean" in the Governor's race than for Superintendent. If partisanship were the dominant factor, we would expect Reykdal to match Ferguson's highs in the bluest districts and his lows in the reddest—but instead, his range compressed toward the center.
-
-Open question: do we want to analyze the outliers? If so, do so here. If not, remove the depiction of them from the visualization.
 
 ## Incumbency and Reinforcement of 2020 Results
 
@@ -252,19 +240,10 @@ incumbencyScatterDf <- byLD %>%
   ) %>%
   select(LegDistrict, vReykdal2024, d2020)
 
-incumbencyLm <- lm(d2020 ~ vReykdal2024, data = incumbencyScatterDf)
-incumbencyScatterDf <- incumbencyScatterDf %>%
-  mutate(residual = abs(resid(incumbencyLm))) %>%
-  arrange(desc(residual)) %>%
-  mutate(labelDistrict = if_else(row_number() <= 6, as.character(LegDistrict), NA_character_))
 
 ggplot(incumbencyScatterDf, aes(x = vReykdal2024, y = d2020)) +
   geom_smooth(formula = 'y ~ x', method = "lm", se = FALSE, color = "gray70", linetype = "dashed", linewidth = 0.5) +
   geom_point() +
-  geom_text_repel(aes(label = labelDistrict), na.rm = TRUE, size = 3,
-                  min.segment.length = 0, box.padding = 0.5, point.padding = 0.3,
-                  segment.color = "gray50", segment.size = 0.3,
-                  direction = "y", force = 2) +
   scale_x_continuous(labels = percent_format(accuracy = 1)) +
   scale_y_continuous(labels = percent_format(accuracy = 1)) +
   labs(
@@ -405,55 +384,3 @@ We can interpret these results as follows:
 * Holding the other two variables constant, for every 1 point increase in Saaris's primary vote share, Reykdal's _general_ election vote share increased by about a quarter point
 
 Thus the regression analysis provides further evidence for the hypotheses raised above, which is that in general, the distribution of Reykdal vote share across precincts "compressed" from August to November, as he improved performance in the August precincts where he did the worst, and diminished performance in the August precincts where he did the best. And in general, his performance tracked closely with that of Governor Ferguson, suggesting close (but not perfect) partisan alignment with Democratic voters. And finally, Reykdal captured the lion's share of the Saaris primary vote.
-
-## Outlier Districts: The 22nd
-
-NOTE: Need to figure out whether to use this or not, and if so, where to put it.
-
-As noted above, the 22nd Legislative District stands out as an outlier in Reykdal's performance relative to Governor Ferguson. While districts with similar Reykdal vote shares (60-65%) typically show Ferguson outperforming Reykdal by 5-7 points, in the 22nd Reykdal trailed Ferguson by only 2.4 points. The 22nd encompasses the state capital region—Olympia, Lacey, and Tumwater—home to state government workers and The Evergreen State College. The following map shows the precinct-level difference between Reykdal's and Ferguson's vote shares in the 2024 General election:
-
-```{r, echo=FALSE, fig.height=7, out.width='100%'}
-fergusonCompareAdf <- candidate2024 %>%
-  mutate(
-    vReykdal=SPI2024G_Reykdal/(SPI2024G_Reykdal+SPI2024G_Other),
-    vFerguson=Governor2024G_Ferguson/(Governor2024G_Ferguson+Governor2024G_Other),
-    dFerguson=vReykdal-vFerguson
-  ) %>% select(-LegDistrict)
-
-fergusonCompareMidpoint <- fergusonCompareAdf %>% pull(dFerguson) %>% median(na.rm=TRUE)
-
-precincts2024 %>% filter(LegDistrict == 22) %>% left_join(fergusonCompareAdf, by=c('FIPS', 'Precinct'='PrecinctCode')) %>% ggplot() +
-  geom_sf(mapping=aes(fill=dFerguson)) +
-  scale_fill_gradient2(low="#8c510a", high="#01665e", guide="colorbar", na.value="grey90", labels=label_number(accuracy=.01), midpoint=fergusonCompareMidpoint) +
-  labs(fill=NULL) +
-  guides(fill=guide_colorbar(position='bottom')) +
-  labs(title='Reykdal vote share minus Ferguson vote share, 2024 General Election',
-       subtitle='Legislative District 22',
-       caption=paste0(
-         'Color gradient scaled so that neutral/white represents the statewide median difference of ', comma(fergusonCompareMidpoint, accuracy=.01),
-         '\nGrey-shaded precincts had no results reported, or results were combined with nearby precincts by SOS Elections to protect voter privacy'
-       ),
-  ) +
-  theme_map() +
-  theme(legend.justification.bottom = 'center', legend.key.width = unit(50, "points"))
-```
-
-For comparison, the following map shows the same measure for the 28th and 29th Legislative Districts in Pierce County. These districts are similarly dense and suburban, but with a larger military population due to proximity to Joint Base Lewis-McChord.
-
-```{r, echo=FALSE, fig.height=7, out.width='100%'}
-precincts2024 %>% filter(LegDistrict %in% c(28, 29)) %>% left_join(fergusonCompareAdf, by=c('FIPS', 'Precinct'='PrecinctCode')) %>% ggplot() +
-  geom_sf(mapping=aes(fill=dFerguson)) +
-  scale_fill_gradient2(low="#8c510a", high="#01665e", guide="colorbar", na.value="grey90", labels=label_number(accuracy=.01), midpoint=fergusonCompareMidpoint) +
-  labs(fill=NULL) +
-  guides(fill=guide_colorbar(position='bottom')) +
-  labs(title='Reykdal vote share minus Ferguson vote share, 2024 General Election',
-       subtitle='Legislative Districts 28 and 29',
-       caption=paste0(
-         'Color gradient scaled so that neutral/white represents the statewide median difference of ', comma(fergusonCompareMidpoint, accuracy=.01),
-         '\nGrey-shaded precincts had no results reported, or results were combined with nearby precincts by SOS Elections to protect voter privacy'
-       ),
-  ) +
-  theme_map() +
-  theme(legend.justification.bottom = 'center', legend.key.width = unit(50, "points"))
-```
-
