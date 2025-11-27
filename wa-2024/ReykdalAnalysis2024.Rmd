@@ -382,7 +382,14 @@ regResults <- candidate2024 %>%
 
 regResults %>% tidy() %>%
   select(term, estimate, `std.error`, statistic) %>%
-  kable(col.names = c('Variable', 'Coefficient', 'Standard Error', 't Statistic'), 
+  mutate(term = case_when(
+    term == "(Intercept)" ~ "Intercept",
+    term == "ReykdalPrimaryShare" ~ "Reykdal 2024 Primary Vote Share",
+    term == "FergusonGeneralShare" ~ "Ferguson 2024 General Vote Share",
+    term == "SaarisPrimaryShare" ~ "Saaris 2024 Primary Vote Share",
+    .default = term
+  )) %>%
+  kable(col.names = c('Variable', 'Coefficient', 'Standard Error', 't Statistic'),
         format = "html",
         digits=2) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
