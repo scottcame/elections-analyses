@@ -85,8 +85,11 @@ candidate2020 <- generalResults2020Df %>%
 byLD <- candidate2020 %>% group_by(LegDistrict) %>% summarise(across(-c(FIPS, PrecinctCode), sum, .names = "{col}")) %>%
   inner_join(candidate2024 %>% group_by(LegDistrict) %>% summarise(across(-c(FIPS, PrecinctCode), sum, .names = "{col}")), by='LegDistrict')
 
+ldBoundaries2024 <- st_read('/opt/data/spatial/Washington_State_Legislative_Districts_2024.geojson', quiet = TRUE) %>%
+  rename(LegDistrict = District)
+
 byLD <- byLD %>%
-  inner_join(st_read('/opt/data/spatial/Washington_State_Legislative_Districts_2024.geojson'), by=c('LegDistrict'='District')) %>%
+  inner_join(ldBoundaries2024, by='LegDistrict') %>%
   inner_join(tribble(
   ~LegDistrict, ~Counties, ~Cities,
   1, "King/Snohomish", "Bothell, Kenmore, Lake Forest Park, Lynnwood, Mountlake Terrace",
@@ -293,8 +296,24 @@ The third theme considers Superintendent Reykdal's performance in the 2024 Gener
 primaryGeneralMidpoint <- primaryGeneralAdf %>% pull(d2024P) %>% median(na.rm=TRUE)
 primaryGeneralDistricts <- c(43,36,46,41,48,34,11,32)
 
-precincts2024 %>% filter(LegDistrict %in% primaryGeneralDistricts) %>% left_join(primaryGeneralAdf, by=c('FIPS', 'Precinct'='PrecinctCode'))  %>% ggplot() +
-  geom_sf(mapping=aes(fill=d2024P)) +
+# Calculate label positions outside the map
+primaryGeneralLdBoundaries <- ldBoundaries2024 %>% filter(LegDistrict %in% primaryGeneralDistricts)
+bbox <- st_bbox(primaryGeneralLdBoundaries)
+center_x <- (bbox["xmin"] + bbox["xmax"]) / 2
+center_y <- (bbox["ymin"] + bbox["ymax"]) / 2
+
+primaryGeneralLdLabels <- primaryGeneralLdBoundaries %>%
+  st_point_on_surface() %>%
+  mutate(
+    x = st_coordinates(geometry)[,1],
+    y = st_coordinates(geometry)[,2]
+  ) %>%
+  st_drop_geometry()
+
+precincts2024 %>% filter(LegDistrict %in% primaryGeneralDistricts) %>% left_join(primaryGeneralAdf, by=c('FIPS', 'Precinct'='PrecinctCode')) %>% ggplot() +
+  geom_sf(mapping=aes(fill=d2024P), color = NA) +
+  geom_sf(data = primaryGeneralLdBoundaries, fill = NA, color = "gray80", linewidth = 0.2) +
+  geom_text(data = primaryGeneralLdLabels, aes(x = x, y = y, label = LegDistrict), size = 2.5, color = "black", alpha = 0.5) +
   scale_fill_gradient2(low="#8c510a", high="#01665e", guide="colorbar", na.value="grey90", labels=label_number(accuracy=.01), midpoint=primaryGeneralMidpoint) +
   labs(fill=NULL) +
   guides(fill=guide_colorbar(position='bottom')) +
