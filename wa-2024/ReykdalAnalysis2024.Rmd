@@ -2,6 +2,17 @@
 output: html_document
 ---
 
+```{css, echo=FALSE}
+body {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+.main-container {
+  max-width: 1200px;
+}
+```
+
 ```{r setup, include=FALSE}
 
 library(tidyverse)
@@ -10,6 +21,7 @@ library(scales)
 library(kableExtra)
 library(ggthemes)
 library(broom)
+library(ggrepel)
 
 # Data provenance:
 #   precinct-geo.R creates precincts2020 and precincts2024 (precinct spatial geometries
@@ -73,7 +85,60 @@ candidate2020 <- generalResults2020Df %>%
 byLD <- candidate2020 %>% group_by(LegDistrict) %>% summarise(across(-c(FIPS, PrecinctCode), sum, .names = "{col}")) %>%
   inner_join(candidate2024 %>% group_by(LegDistrict) %>% summarise(across(-c(FIPS, PrecinctCode), sum, .names = "{col}")), by='LegDistrict')
 
-byLD <- byLD %>% inner_join(st_read('/opt/data/spatial/Washington_State_Legislative_Districts_2024.geojson'), by=c('LegDistrict'='District'))
+byLD <- byLD %>%
+  inner_join(st_read('/opt/data/spatial/Washington_State_Legislative_Districts_2024.geojson'), by=c('LegDistrict'='District')) %>%
+  inner_join(tribble(
+  ~LegDistrict, ~Counties, ~Cities,
+  1, "King/Snohomish", "Bothell, Kenmore, Lake Forest Park, Lynnwood, Mountlake Terrace",
+  2, "Pierce/Thurston", "Yelm, Eatonville",
+  3, "Spokane", "Spokane",
+  4, "Spokane", "NE Spokane, Spokane Valley",
+  5, "King", "Issaquah, Snoqualmie, Enumclaw",
+  6, "Spokane", "NW Spokane, Cheney, Medical Lake",
+  7, "Chelan/Douglas/Ferry/Okanogan/Pend Oreille/Spokane/Stevens", "Colville, Okanogan, Omak, Chelan",
+  8, "Benton/Franklin", "Tri-Cities South",
+  9, "Adams/Asotin/Columbia/Garfield/Lincoln/Spokane/Whitman", "Pullman, Clarkston, Colfax, Asotin, Dayton, Pomeroy",
+  10, "Island/Skagit/Snohomish", "Whidbey Island, Camano Island, Arlington",
+  11, "King", "Renton, Tukwila",
+  12, "Chelan/King/Snohomish", "W Wenatchee, Leavenworth, Cashmere, Monroe, Chelan",
+  13, "Adams/Douglas/Grant/Kittitas", "Cle Elum, Moses Lake, Ellensburg, Ephrata",
+  14, "Benton/Franklin/Klickitat/Yakima", "Yakima Valley South",
+  15, "Benton, Yakima", "Yakima Valley North",
+  16, "Benton/Franklin/Grant/Walla Walla", "Walla Walla, Tri-Cities North",
+  17, "Clark/Klickitat/Skamania", "Vancouver East, Camas, Washougal, Stevenson",
+  18, "Clark", "Vancouver North, Battle Ground",
+  19, "Cowlitz/Grays Harbor/Lewis/Pacific/Thurston/Wahkiakum", "Longview, Kelso, Centralia West, Aberdeen, Raymond, Westport",
+  20, "Clark/Cowlitz/Lewis/Thurston", "Centralia East, Woodland, Winlock, Toledo, Morton",
+  21, "Snohomish", "Edmonds, Mukilteo",
+  22, "Thurston", "Olympia, Lacey, Tumwater",
+  23, "Kitsap", "Bremerton North, Poulsbo, Bainbridge Island, Kingston",
+  24, "Clallam/Grays Harbor/Jefferson", "Port Angeles, Sequim, Port Townsend, Forks, Ocean Shores",
+  25, "Pierce", "Puyallup, South Hill",
+  26, "Kitsap/Pierce", "Gig Harbor, Port Orchard, Purdy, Key Center",
+  27, "Pierce", "Tacoma, Fircrest, Ruston",
+  28, "Pierce", "Lakewood, University Place, Steilacoom, Du Pont",
+  29, "Pierce", "Tacoma South, Parkland, Spanaway",
+  30, "King", "Federal Way, Auburn South",
+  31, "King/Pierce", "Auburn SE, Sumner, Bonney Lake",
+  32, "King/Snohomish", "Shoreline, Mountlake Terrace",
+  33, "King", "Kent, SeaTac, Des Moines",
+  34, "King", "West Seattle, White Center, SODO, Vashon",
+  35, "Kitsap/Mason/Thurston", "Bremerton South, Shelton, Belfair, Allyn",
+  36, "King", "Seattle (Magnolia, Ballard)",
+  37, "King", "Seattle (Mount Baker, Rainier Valley)",
+  38, "Snohomish", "Everett, Marysville, Tulalip",
+  39, "Skagit/Snohomish", "Mount Vernon East, Burlington, Sedro-Woolley",
+  40, "San Juan/Skagit/Whatcom", "San Juans, Bellingham South, Anacortes",
+  41, "King", "Bellevue South, Mercer Island, Newcastle, Sammamish",
+  42, "Whatcom", "Bellingham, Ferndale, Lynden, Blaine",
+  43, "King", "Seattle (Belltown, U District, Capitol Hill, Fremont)",
+  44, "Snohomish", "Snohomish, Mill Creek",
+  45, "King", "Kirkland, Redmond North",
+  46, "King", "Seattle (Greenlake, Wedgwood, Lake City)",
+  47, "King", "Auburn North, Maple Valley, Covington",
+  48, "King", "Bellevue North, Redmond",
+  49, "Clark", "Vancouver"
+) %>% mutate(LegDistrictDescription=paste0(LegDistrict, ': ', Counties, '<br>', Cities)) %>% select(LegDistrict, LegDistrictDescription), by='LegDistrict')
 
 # won't use the by-county stuff for now, just getting this ready
   
@@ -91,7 +156,7 @@ to examine Chris Reykdal's performance in the 2024 general election compared to:
 * Governor Bob Ferguson's performance in the 2024 general
 * His own performance in the 2020 general
 
-We will examine each of these questions by Legislative District.
+We will examine each of these topics by Legislative District. This is more advantageous than other means of geographic aggregation, like county, because Legislative Districts are roughly equal in population, and provide a bit more granularity (there are 49 LDs but only 39 counties). 
 
 ## Summary of the 2024 General Election for Washington State Superintendent of Public Instruction
 
@@ -114,7 +179,7 @@ byLD %>%
     dFerguson=v2024G-vFerguson,
     v2020G=SPI2020G_Reykdal/(SPI2020G_Reykdal+SPI2020G_Other),
     d2020G=v2024G-v2020G
-  ) %>% select(LegDistrict, matches('^(v|d)')) %>% arrange(desc(v2024G)) %>%
+  ) %>% select(LegDistrictDescription, matches('^(v|d)')) %>% arrange(desc(v2024G)) %>%
   mutate(
     across(starts_with('v'), ~ percent(.x, accuracy=.1)),
     across(starts_with('d'), ~ percent(.x, accuracy=.2))
@@ -122,7 +187,7 @@ byLD %>%
   mutate(
     across(c('d2020G','dFerguson'), function(col) cell_spec(col, color=if_else(as.double(str_replace(col,'%','')) < 0, 'red', 'green')))
   ) %>%
-kable(col.names = c('LegDistrict'='District', 'v2024G'='Reykdal 2024 General', 'Share', 'Difference', 'Share', 'Difference', 'Share', 'Difference'), 
+kable(col.names = c('LegDistrictDescription'='District', 'v2024G'='Reykdal 2024 General', 'Share', 'Difference', 'Share', 'Difference', 'Share', 'Difference'), 
         format = "html",
       escape = FALSE,
         digits = 1) %>%
@@ -131,11 +196,87 @@ kable(col.names = c('LegDistrict'='District', 'v2024G'='Reykdal 2024 General', '
 
 ```
 
-## Themes: Partisanship, Reinforcement, and Disposition of the Primary Vote
+In the following sections, we will explore three insights that we can gain from these results: partisanship, incumbency, and distribution of the primary vote in the general election.
 
-The results in this table suggest a few broad themes in the 2024 General election for Superintendent of Public Instruction. One is that partisanship appears to play less of a role in voters' choice of Superintendent, which is perhaps not surprising given that the office is non-partisan, without party preference noted on the ballot. Superintendent Reykdal underperformed Governor Ferguson in those districts in which Reykdal performed the best, and he overperformed Ferguson in the districts where he performed the worst. And the overall range of vote share by district for the two candidates (36-81 percent for Reykdal, versus 34-89 percent for Ferguson) also demonstrates that there was more "lean" in the Governor's race than for Superintendent. If partisanship were the dominant factor, we would expect Reykdal to match Ferguson's highs in the bluest districts and his lows in the reddest—but instead, his range compressed toward the center. A couple of legislative districts stand out as outliers in this regard: the 14th and 22nd. We will do a little more analysis on these below.
+## Diminished Partisanship in the Vote for Superintendent
 
-The second theme of note compares Reykdal's vote share by district in the 2024 and 2020 General elections. Broadly speaking, in 2024 Reykdal overperformed his 2020 results in districts where he did the best, and underperformed where he did the worst. This might suggest that Reykdal's term from 2020-2024 reinforced the electorate's views of him, as those who approved in 2020 generally approved even more in 2024, with the opposite reinforcement in districts that preferred his opponents. As with the theme of partisanship, there are outliers, and again the 14th district stands out. Reykdal actually won the 14th district in 2020, with 50.8% of the vote, but lost it in 2024 by 18 points.
+The following scatterplot visualizes the relationship between Reykdal's and Ferguson's 2024 General election vote shares by legislative district. Districts further from the regression line represent outliers where Reykdal's performance diverged most from what partisanship alone would predict.
+
+```{r, echo=FALSE, fig.height=6, out.width='100%'}
+fergusonScatterDf <- byLD %>%
+  st_drop_geometry() %>%
+  mutate(
+    vReykdal = SPI2024G_Reykdal / (SPI2024G_Reykdal + SPI2024G_Other),
+    vFerguson = Governor2024G_Ferguson / (Governor2024G_Ferguson + Governor2024G_Other),
+    dFerguson = vReykdal - vFerguson
+  ) %>%
+  select(LegDistrict, vReykdal, dFerguson)
+
+fergusonLm <- lm(dFerguson ~ vReykdal, data = fergusonScatterDf)
+fergusonScatterDf <- fergusonScatterDf %>%
+  mutate(residual = abs(resid(fergusonLm))) %>%
+  arrange(desc(residual)) %>%
+  mutate(labelDistrict = if_else(row_number() <= 6, as.character(LegDistrict), NA_character_))
+
+ggplot(fergusonScatterDf, aes(x = vReykdal, y = dFerguson)) +
+  geom_smooth(formula = 'y ~ x', method = "lm", se = FALSE, color = "gray70", linetype = "dashed", linewidth = 0.5) +
+  geom_point() +
+  geom_text_repel(aes(label = labelDistrict), na.rm = TRUE, size = 3,
+                  min.segment.length = 0, box.padding = 0.5, point.padding = 0.3,
+                  segment.color = "gray50", segment.size = 0.3,
+                  direction = "y", force = 2) +
+  scale_x_continuous(labels = percent_format(accuracy = 1)) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  labs(
+    x = "Reykdal 2024 General Vote Share",
+    y = "Reykdal relative performance vs Ferguson"
+  ) +
+  theme_minimal()
+```
+
+Partisanship appears to play less of a role in voters' choice of Superintendent, which is perhaps not surprising given that the office is non-partisan, without party preference noted on the ballot. Superintendent Reykdal underperformed Governor Ferguson in those districts in which Reykdal performed the best, and he overperformed Ferguson in the districts where he performed the worst. And the overall range of vote share by district for the two candidates (36-81 percent for Reykdal, versus 34-89 percent for Ferguson) also demonstrates that there was more "lean" in the Governor's race than for Superintendent. If partisanship were the dominant factor, we would expect Reykdal to match Ferguson's highs in the bluest districts and his lows in the reddest—but instead, his range compressed toward the center.
+
+Open question: do we want to analyze the outliers? If so, do so here. If not, remove the depiction of them from the visualization.
+
+## Incumbency and Reinforcement of 2020 Results
+
+The following scatterplot visualizes the relationship between Reykdal's 2024 and 2020 General election vote shares by legislative district.
+
+```{r, echo=FALSE, fig.height=6, out.width='100%'}
+incumbencyScatterDf <- byLD %>%
+  st_drop_geometry() %>%
+  mutate(
+    vReykdal2024 = SPI2024G_Reykdal / (SPI2024G_Reykdal + SPI2024G_Other),
+    vReykdal2020 = SPI2020G_Reykdal / (SPI2020G_Reykdal + SPI2020G_Other),
+    d2020 = vReykdal2024 - vReykdal2020
+  ) %>%
+  select(LegDistrict, vReykdal2024, d2020)
+
+incumbencyLm <- lm(d2020 ~ vReykdal2024, data = incumbencyScatterDf)
+incumbencyScatterDf <- incumbencyScatterDf %>%
+  mutate(residual = abs(resid(incumbencyLm))) %>%
+  arrange(desc(residual)) %>%
+  mutate(labelDistrict = if_else(row_number() <= 6, as.character(LegDistrict), NA_character_))
+
+ggplot(incumbencyScatterDf, aes(x = vReykdal2024, y = d2020)) +
+  geom_smooth(formula = 'y ~ x', method = "lm", se = FALSE, color = "gray70", linetype = "dashed", linewidth = 0.5) +
+  geom_point() +
+  geom_text_repel(aes(label = labelDistrict), na.rm = TRUE, size = 3,
+                  min.segment.length = 0, box.padding = 0.5, point.padding = 0.3,
+                  segment.color = "gray50", segment.size = 0.3,
+                  direction = "y", force = 2) +
+  scale_x_continuous(labels = percent_format(accuracy = 1)) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  labs(
+    x = "Reykdal 2024 General Vote Share",
+    y = "Reykdal 2024 relative performance vs Reykdal 2020"
+  ) +
+  theme_minimal()
+```
+
+Broadly speaking, in 2024 Reykdal overperformed his 2020 results in districts where he did the best, and underperformed where he did the worst. This might suggest that Reykdal's term from 2020-2024 reinforced the electorate's views of him, as those who approved in 2020 generally approved even more in 2024, with the opposite reinforcement in districts that preferred his opponents. As with the theme of partisanship, there are outliers, and again the 14th district stands out. Reykdal actually won the 14th district in 2020, with 50.8% of the vote, but lost it in 2024 by 18 points.
+
+## Distribution of the Saaris Vote from the August Primary
 
 The third theme considers Superintendent Reykdal's performance in the 2024 General versus the August Primary. These results allow us to get a glimpse into how the electorate allocated votes cast in August for candidates who did not make it to the General, though we should keep in mind that in the Presidential election years that align with statewide elections in Washington, the electorate in November is different in important ways from those who vote in August. Nonetheless, an interesting hypothesis emerges in the results: Superintendent Reykdal improved on his Primary election performance the most in the Seattle metro area. Of the top ten districts ranked by Primary-to-General improvement, eight are in King County (the other two are the 23rd in northern Kitsap County, and the 40th in San Juan and eastern Whatcom and Skagit Counties). The following map shows the precinct-level change in vote share in the eight King County districts:
 
@@ -210,16 +351,21 @@ corel <- cor(saaris$saarisPct, saaris$d2024P)
 Further analysis shows that Superintendent Reykdal likely attracted the majority of the voters who voted for Reid Saaris in the August Primary. Saaris finished third in the Primary, with 24 percent of the primary vote. Of the ten legislative districts just mentioned in which Reykdal improved his vote share the most from August to November, eight of them were in Saaris's best ten districts from the Primary:
 
 ```{r echo=FALSE}
-saarisByLD %>% arrange(desc(saarisPct)) %>% select(LegDistrict, saarisPct) %>% top_n(10, saarisPct) %>%
+saarisByLD %>%
+  inner_join(byLD %>% st_drop_geometry() %>% select(LegDistrict, LegDistrictDescription), by = 'LegDistrict') %>%
+  arrange(desc(saarisPct)) %>% select(LegDistrictDescription, saarisPct) %>% top_n(10, saarisPct) %>%
   mutate(saarisPct = percent(saarisPct, accuracy=0.1)) %>%
-  kable(col.names = c('LegDistrict'='District', 'saarisPct'='Saaris Share of 2024 Primary Vote'), 
+  kable(col.names = c('LegDistrictDescription'='District', 'saarisPct'='Saaris Share of 2024 Primary Vote'),
         format = "html",
-        align = c('r','r'),
+        escape = FALSE,
+        align = c('l','r'),
         digits = 1) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
 ```
 
 While we cannot say with much confidence how much of the Saaris primary vote switched to Reykdal in the General, the fact that 8 of the 10 districts in which Reykdal improved the most were _also_ in Saaris's top ten districts is strong evidence that these were many of the same voters. To put it in statistical terms, the Pearson's correlation coefficient at the *precinct* level, on a statewide basis, between the change in Reykdal's vote share from Primary to General and Saaris's vote share in the primary was `r comma(corel, accuracy=.01)`.
+
+## Bringing it together: regression analysis of the three themes
 
 We can bring all of these factors together in a precinct-level regression analysis to attempt to explain the change in Superintendent Reykdal's vote share from the August Primary to the General election. In this analysis we regress the change in vote share on three variables: Reykdal's share of the primary election vote, Governor Ferguson's share of the general election vote, and Reid Saaris's share of the primary vote. We make the simplifying assumption that ordinary least-squares regression conditions are satisfied. The results of the analysis are as follows:
 
@@ -253,7 +399,54 @@ We can interpret these results as follows:
 
 Thus the regression analysis provides further evidence for the hypotheses raised above, which is that in general, the distribution of Reykdal vote share across precincts "compressed" from August to November, as he improved performance in the August precincts where he did the worst, and diminished performance in the August precincts where he did the best. And in general, his performance tracked closely with that of Governor Ferguson, suggesting close (but not perfect) partisan alignment with Democratic voters. And finally, Reykdal captured the lion's share of the Saaris primary vote.
 
+## Outlier Districts: The 22nd
 
+NOTE: Need to figure out whether to use this or not, and if so, where to put it.
 
+As noted above, the 22nd Legislative District stands out as an outlier in Reykdal's performance relative to Governor Ferguson. While districts with similar Reykdal vote shares (60-65%) typically show Ferguson outperforming Reykdal by 5-7 points, in the 22nd Reykdal trailed Ferguson by only 2.4 points. The 22nd encompasses the state capital region—Olympia, Lacey, and Tumwater—home to state government workers and The Evergreen State College. The following map shows the precinct-level difference between Reykdal's and Ferguson's vote shares in the 2024 General election:
 
+```{r, echo=FALSE, fig.height=7, out.width='100%'}
+fergusonCompareAdf <- candidate2024 %>%
+  mutate(
+    vReykdal=SPI2024G_Reykdal/(SPI2024G_Reykdal+SPI2024G_Other),
+    vFerguson=Governor2024G_Ferguson/(Governor2024G_Ferguson+Governor2024G_Other),
+    dFerguson=vReykdal-vFerguson
+  ) %>% select(-LegDistrict)
+
+fergusonCompareMidpoint <- fergusonCompareAdf %>% pull(dFerguson) %>% median(na.rm=TRUE)
+
+precincts2024 %>% filter(LegDistrict == 22) %>% left_join(fergusonCompareAdf, by=c('FIPS', 'Precinct'='PrecinctCode')) %>% ggplot() +
+  geom_sf(mapping=aes(fill=dFerguson)) +
+  scale_fill_gradient2(low="#8c510a", high="#01665e", guide="colorbar", na.value="grey90", labels=label_number(accuracy=.01), midpoint=fergusonCompareMidpoint) +
+  labs(fill=NULL) +
+  guides(fill=guide_colorbar(position='bottom')) +
+  labs(title='Reykdal vote share minus Ferguson vote share, 2024 General Election',
+       subtitle='Legislative District 22',
+       caption=paste0(
+         'Color gradient scaled so that neutral/white represents the statewide median difference of ', comma(fergusonCompareMidpoint, accuracy=.01),
+         '\nGrey-shaded precincts had no results reported, or results were combined with nearby precincts by SOS Elections to protect voter privacy'
+       ),
+  ) +
+  theme_map() +
+  theme(legend.justification.bottom = 'center', legend.key.width = unit(50, "points"))
+```
+
+For comparison, the following map shows the same measure for the 28th and 29th Legislative Districts in Pierce County. These districts are similarly dense and suburban, but with a larger military population due to proximity to Joint Base Lewis-McChord.
+
+```{r, echo=FALSE, fig.height=7, out.width='100%'}
+precincts2024 %>% filter(LegDistrict %in% c(28, 29)) %>% left_join(fergusonCompareAdf, by=c('FIPS', 'Precinct'='PrecinctCode')) %>% ggplot() +
+  geom_sf(mapping=aes(fill=dFerguson)) +
+  scale_fill_gradient2(low="#8c510a", high="#01665e", guide="colorbar", na.value="grey90", labels=label_number(accuracy=.01), midpoint=fergusonCompareMidpoint) +
+  labs(fill=NULL) +
+  guides(fill=guide_colorbar(position='bottom')) +
+  labs(title='Reykdal vote share minus Ferguson vote share, 2024 General Election',
+       subtitle='Legislative Districts 28 and 29',
+       caption=paste0(
+         'Color gradient scaled so that neutral/white represents the statewide median difference of ', comma(fergusonCompareMidpoint, accuracy=.01),
+         '\nGrey-shaded precincts had no results reported, or results were combined with nearby precincts by SOS Elections to protect voter privacy'
+       ),
+  ) +
+  theme_map() +
+  theme(legend.justification.bottom = 'center', legend.key.width = unit(50, "points"))
+```
 
