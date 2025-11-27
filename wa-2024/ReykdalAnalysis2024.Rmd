@@ -228,7 +228,7 @@ Partisanship appears to play less of a role in voters' choice of Superintendent,
 
 ## Incumbency and Reinforcement of 2020 Results
 
-The following scatterplot visualizes the relationship between Reykdal's 2024 and 2020 General election vote shares by legislative district.
+The following scatterplot visualizes the relationship between Superintendent Reykdal's 2024 and 2020 General election vote shares by legislative district.
 
 ```{r, echo=FALSE, fig.height=6, out.width='100%'}
 incumbencyScatterDf <- byLD %>%
@@ -236,14 +236,15 @@ incumbencyScatterDf <- byLD %>%
   mutate(
     vReykdal2024 = SPI2024G_Reykdal / (SPI2024G_Reykdal + SPI2024G_Other),
     vReykdal2020 = SPI2020G_Reykdal / (SPI2020G_Reykdal + SPI2020G_Other),
-    d2020 = vReykdal2024 - vReykdal2020
+    d2020 = vReykdal2024 - vReykdal2020,
+    flipped = (vReykdal2020 > 0.5 & vReykdal2024 < 0.5) | (vReykdal2020 < 0.5 & vReykdal2024 > 0.5)
   ) %>%
-  select(LegDistrict, vReykdal2024, d2020)
-
+  select(LegDistrict, LegDistrictDescription, vReykdal2024, vReykdal2020, d2020, flipped)
 
 ggplot(incumbencyScatterDf, aes(x = vReykdal2024, y = d2020)) +
   geom_smooth(formula = 'y ~ x', method = "lm", se = FALSE, color = "gray70", linetype = "dashed", linewidth = 0.5) +
   geom_point() +
+  geom_text_repel(data = filter(incumbencyScatterDf, flipped), aes(label = LegDistrict), size = 3, max.overlaps = 20, min.segment.length = 0, segment.color = "gray50", box.padding = 0.5) +
   scale_x_continuous(labels = percent_format(accuracy = 1)) +
   scale_y_continuous(labels = percent_format(accuracy = 1)) +
   labs(
@@ -253,7 +254,29 @@ ggplot(incumbencyScatterDf, aes(x = vReykdal2024, y = d2020)) +
   theme_minimal()
 ```
 
-Broadly speaking, in 2024 Reykdal overperformed his 2020 results in districts where he did the best, and underperformed where he did the worst. This might suggest that Reykdal's term from 2020-2024 reinforced the electorate's views of him, as those who approved in 2020 generally approved even more in 2024, with the opposite reinforcement in districts that preferred his opponents. As with the theme of partisanship, there are outliers, and again the 14th district stands out. Reykdal actually won the 14th district in 2020, with 50.8% of the vote, but lost it in 2024 by 18 points.
+Broadly speaking, in 2024 Superintendent Reykdal overperformed his 2020 results in districts where he did the best, and underperformed where he did the worst. This might suggest that Reykdal's term from 2020-2024 reinforced the electorate's views of him, as those who approved in 2020 generally approved even more in 2024, with the opposite reinforcement in districts that preferred his opponents.
+
+The districts labeled in the scatterplot are those that "flipped" in 2024; Superintendent Reykdal won five districts (narrowly) in 2020 that he lost in 2024, and he won 2 districts (again, narrowly) in 2024 that he had lost in 2020. Notably, his vote share improved most in Pierce County districts, while it dropped the most in the Yakima Valley, the west Spokane suburbs, and rural Kitsap and Mason Counties. The 10th district--a perennial "swing" district centered on Island County--was technically a win-to-loss flip, but was extremely close in both elections.
+
+```{r, echo=FALSE}
+incumbencyScatterDf %>%
+  filter(flipped) %>%
+  arrange(d2020) %>%
+  mutate(
+    vReykdal2020 = percent(vReykdal2020, accuracy = 0.1),
+    vReykdal2024 = percent(vReykdal2024, accuracy = 0.1)
+  ) %>%
+  select(LegDistrictDescription, vReykdal2020, vReykdal2024) %>%
+  kable(
+    format = "html",
+    col.names = c('Legislative District', 'Reykdal 2020', 'Reykdal 2024'),
+    align = c('l', 'r', 'r'),
+    escape = FALSE
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE) %>%
+  column_spec(2:3, extra_css = "text-align: right;") %>%
+  add_header_above(c(" " = 1, "Vote Share" = 2))
+```
 
 ## Distribution of the Saaris Vote from the August Primary
 
