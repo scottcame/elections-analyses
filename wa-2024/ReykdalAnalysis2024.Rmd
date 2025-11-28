@@ -1,4 +1,5 @@
 ---
+title: "The 2024 Election for Superintendent of Public Instruction: An Analysis by Legislative District"
 output: html_document
 ---
 
@@ -153,7 +154,7 @@ byLD <- byLD %>%
 ```
 
 This analysis aggregates election results data (from the Washington Secretary of State) from the 2024 August Primary and General elections, and the 2020 General election, in order
-to examine Chris Reykdal's performance in the 2024 general election compared to:
+to examine Superintendent of Public Instruction Chris Reykdal's performance in the 2024 general election compared to:
 
 * His own performance in the 2024 August primary
 * Governor Bob Ferguson's performance in the 2024 general
@@ -161,7 +162,7 @@ to examine Chris Reykdal's performance in the 2024 general election compared to:
 
 We will examine each of these topics by Legislative District. This is more advantageous than other means of geographic aggregation, like county, because Legislative Districts are roughly equal in population, and provide a bit more granularity (there are 49 LDs but only 39 counties). 
 
-## Summary of the 2024 General Election for Washington State Superintendent of Public Instruction
+## Data Summary
 
 ```{r, include=FALSE}
 
@@ -285,8 +286,8 @@ incumbencyScatterDf %>%
 
 The third theme considers Superintendent Reykdal's performance in the 2024 General versus the August Primary. These results allow us to get a glimpse into how the electorate allocated votes cast in August for candidates who did not make it to the General, though we should keep in mind that in the Presidential election years that align with statewide elections in Washington, the electorate in November is different in important ways from those who vote in August. Nonetheless, an interesting hypothesis emerges in the results: Superintendent Reykdal improved on his Primary election performance the most in the Seattle metro area. Of the top ten districts ranked by Primary-to-General improvement, eight are in King County (the other two are the 23rd in northern Kitsap County, and the 40th in San Juan and eastern Whatcom and Skagit Counties). The following map shows the precinct-level change in vote share in the eight King County districts:
 
-```{r, echo=FALSE, fig.height=9, out.width='100%'}
-  primaryGeneralAdf <- candidate2024 %>%
+```{r, echo=FALSE, warning=FALSE, fig.height=9, out.width='100%'}
+primaryGeneralAdf <- candidate2024 %>%
   mutate(
     v2024G=SPI2024G_Reykdal/(SPI2024G_Reykdal+SPI2024G_Other),
     v2024P=SPI2024P_Reykdal/(SPI2024P_Reykdal+SPI2024P_Other),
@@ -310,10 +311,30 @@ primaryGeneralLdLabels <- primaryGeneralLdBoundaries %>%
   ) %>%
   st_drop_geometry()
 
+placeLabels <- tribble(
+  ~Place, ~lat, ~long,
+  "Vashon Island", 47.447202, -122.483842,
+  "Ballard", 47.677213, -122.400067,
+  "Mercer Island", 47.559464, -122.219446,
+  "West Seattle", 47.582501, -122.388778,
+  "Bellevue", 47.617365, -122.203139,
+  "Renton", 47.480958, -122.216332,
+  "Lake City", 47.715710, -122.288828,
+  "Mountlake Terrace", 47.782218, -122.309129
+)
+
+labelColor <- "black"
+labelAlpha <- 0.6
+
 precincts2024 %>% filter(LegDistrict %in% primaryGeneralDistricts) %>% left_join(primaryGeneralAdf, by=c('FIPS', 'Precinct'='PrecinctCode')) %>% ggplot() +
   geom_sf(mapping=aes(fill=d2024P), color = NA) +
-  geom_sf(data = primaryGeneralLdBoundaries, fill = NA, color = "gray80", linewidth = 0.2) +
-  geom_text(data = primaryGeneralLdLabels, aes(x = x, y = y, label = LegDistrict), size = 2.5, color = "black", alpha = 0.5) +
+  geom_sf(data = primaryGeneralLdBoundaries, fill = NA, color = labelColor, alpha = labelAlpha, linewidth = 0.2) +
+  geom_text(data = primaryGeneralLdLabels, aes(x = x, y = y, label = LegDistrict), size = 2.5, color = labelColor, alpha = labelAlpha) +
+  geom_point(data = placeLabels, aes(x = long, y = lat), size = 1, color = labelColor, alpha = labelAlpha) +
+  geom_text(data = placeLabels, aes(x = long + 0.01, y = lat, label = Place), size = 2, color = labelColor, alpha = labelAlpha, hjust = 0) +
+  annotate("segment", x = -122.400067, xend = -122.117, y = 47.7765, yend = 47.7765, linetype = "dashed", color = labelColor, alpha = labelAlpha, linewidth = 0.25) +
+  annotate("text", x = -122.12, y = 47.77535 + 0.012, label = "Snohomish Co.", size = 2, color = labelColor, alpha = labelAlpha) +
+  annotate("text", x = -122.12, y = 47.77535 - 0.012, label = "King Co.", size = 2, color = labelColor, alpha = labelAlpha) +
   scale_fill_gradient2(low="#8c510a", high="#01665e", guide="colorbar", na.value="grey90", labels=label_number(accuracy=.01), midpoint=primaryGeneralMidpoint) +
   labs(fill=NULL) +
   guides(fill=guide_colorbar(position='bottom')) +
@@ -386,7 +407,7 @@ saarisByLD %>%
 
 While we cannot say with much confidence how much of the Saaris primary vote switched to Reykdal in the General, the fact that 8 of the 10 districts in which Reykdal improved the most were _also_ in Saaris's top ten districts is strong evidence that these were many of the same voters. To put it in statistical terms, the Pearson's correlation coefficient at the *precinct* level, on a statewide basis, between the change in Reykdal's vote share from Primary to General and Saaris's vote share in the primary was `r comma(corel, accuracy=.01)`.
 
-## Bringing it together: regression analysis of the three themes
+## Bringing it all together: regression analysis of the three themes
 
 We can bring all of these factors together in a precinct-level regression analysis to attempt to explain the change in Superintendent Reykdal's vote share from the August Primary to the General election. In this analysis we regress the change in vote share on three variables: Reykdal's share of the primary election vote, Governor Ferguson's share of the general election vote, and Reid Saaris's share of the primary vote. We make the simplifying assumption that ordinary least-squares regression conditions are satisfied. The results of the analysis are as follows:
 
@@ -426,3 +447,9 @@ We can interpret these results as follows:
 * Holding the other two variables constant, for every 1 point increase in Saaris's primary vote share, Reykdal's _general_ election vote share increased by about a quarter point
 
 Thus the regression analysis provides further evidence for the hypotheses raised above, which is that in general, the distribution of Reykdal vote share across precincts "compressed" from August to November, as he improved performance in the August precincts where he did the worst, and diminished performance in the August precincts where he did the best. And in general, his performance tracked closely with that of Governor Ferguson, suggesting close (but not perfect) partisan alignment with Democratic voters. And finally, Reykdal captured the lion's share of the Saaris primary vote.
+
+## Conclusion
+
+An analysis of Superintendent Chris Reykdal's 2024 re-election revealed three insights. First, the non-partisan Superintendent of Public Instruction office does indeed reflect less of a partisan "lean" in the electorate, which we observe through the fact that Superintendent Reykdal underperformed Governor Bob Ferguson in more Democratic legislative districts, and overperformed in more Republican districts. Second, there is some evidence that Superintendent Reykdal's first term served to reinforce voters' perception of him, as his vote share in the 2024 general election was positively correlated with his vote share in 2020. Third, it appears that the votes for the third-place candidate in the August 2024 primary, Reid Saaris, who performed best in key King County districts, were distributed largely in Superintendent Reykdal's favor in the November general election.
+
+This analysis does leave some interesting questions unanswered; these could serve as fruitful topics of further research. In particular, it would be interesting to add demographic data from the US Census to see if additional explanatory factors for relative performance (versus Reykdal 2020 and Ferguson 2024) could be found.
