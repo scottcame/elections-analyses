@@ -154,7 +154,7 @@ byLD <- byLD %>%
 ```
 
 This analysis aggregates election results data (from the Washington Secretary of State) from the 2024 August Primary and General elections, and the 2020 General election, in order
-to examine Superintendent of Public Instruction Chris Reykdal's performance in the 2024 general election compared to:
+to examine elected Superintendent of Public Instruction Chris Reykdal's performance in the 2024 general election compared to:
 
 * His own performance in the 2024 August primary
 * Governor Bob Ferguson's performance in the 2024 general
